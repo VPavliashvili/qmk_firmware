@@ -9,3 +9,6 @@
 #    define OLED_DISPLAY_128X64
 #    define OLED_TIMEOUT 30000
 #endif
+
+#define USE_I2C
+#define MASTER_RIGHT

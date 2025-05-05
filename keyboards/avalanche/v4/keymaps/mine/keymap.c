@@ -3,8 +3,7 @@
 
 #include QMK_KEYBOARD_H
 
-#define T_LANG S(KC_LALT)
-#define TD_MS TD(TD_MS_)
+#define TD_FN TD(TD_FN_)
 
 enum layers {
     _MN, // main
@@ -15,22 +14,22 @@ enum layers {
     _GG, // gaming
 };
 
-// Define a type for as many tap dance states as you need
 typedef enum {
     TD_NONE,
     TD_UNKNOWN,
     TD_SINGLE_TAP,
     TD_SINGLE_HOLD,
-    TD_DOUBLE_TAP
+    TD_DOUBLE_TAP,
+    TD_DOUBLE_HOLD
 } td_state_t;
 
 typedef struct {
-    bool is_press_action;
+    bool is_layer_active;
     td_state_t state;
 } td_tap_t;
 
 enum tap_dance_aliases {
-    TD_MS_
+    TD_FN_,
 };
 
 // Function associated with all tap dances
@@ -39,6 +38,7 @@ td_state_t cur_dance(tap_dance_state_t *state);
 // Functions associated with individual tap dances
 void ql_finished(tap_dance_state_t *state, void *user_data);
 void ql_reset(tap_dance_state_t *state, void *user_data);
+void on_each_tap_fn(tap_dance_state_t *state, void *user_data);
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [_MN] = LAYOUT(
@@ -46,12 +46,12 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                  KC_TAB , KC_Q   , KC_W   , KC_E   , KC_R   , KC_T   ,                                     KC_Y   , KC_U   , KC_I   , KC_O   , KC_P   , KC_BSPC,
         XXXXXXX, KC_ESC , KC_A   , KC_S   , KC_D   , KC_F   , KC_G   ,                                     KC_H   , KC_J   , KC_K   , KC_L   , KC_SCLN, KC_ENT , XXXXXXX,
                  KC_LSFT, KC_Z   , KC_X   , KC_C   , KC_V   , KC_B   , XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_N   , KC_M   , KC_COMM, KC_DOT,  KC_SLSH, KC_RSFT,
-                                            KC_MUTE, KC_LGUI, MO(_SM), KC_SPC , KC_LCTL, TD_MS  , MO(_FN), MO(_NM), KC_RGUI, KC_MPLY
+                                            KC_MUTE, KC_LGUI, KC_LALT, KC_SPC , KC_LCTL, TD_FN  , MO(_SM), MO(_NM), KC_RGUI, KC_MPLY
     ),
     [_SM] = LAYOUT(
                  _______, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                                     XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
                  _______, KC_GRV , KC_TILD, KC_LBRC, KC_LCBR, _______,                                     _______, KC_RCBR, KC_RBRC, _______, _______, _______,
-        XXXXXXX, T_LANG , KC_BSLS, KC_QUOT, KC_DQUO, KC_PIPE, _______,                                     _______, KC_EQL , KC_PLUS, KC_MINS, KC_UNDS, _______, XXXXXXX,
+        XXXXXXX, _______, KC_BSLS, KC_QUOT, KC_DQUO, KC_PIPE, _______,                                     _______, KC_EQL , KC_PLUS, KC_MINS, KC_UNDS, _______, XXXXXXX,
                  _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______, _______,
                                             _______, _______, _______, _______, _______, _______, _______, _______, _______, _______
     ),
@@ -67,7 +67,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                  _______, KC_PSCR, XXXXXXX, XXXXXXX, XXXXXXX, KC_DEL ,                                     KC_F12 , KC_HOME, KC_PGDN, KC_PGUP, KC_END , _______,
         XXXXXXX, _______, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                                     KC_LEFT, KC_DOWN, KC_UP  , KC_RGHT, XXXXXXX, _______, XXXXXXX,
                  _______, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, _______, _______, _______, _______, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, _______,
-                                            _______, TO(_GG), _______, _______, KC_LALT, KC_RALT, _______, _______, _______, _______
+                                            _______, TO(_GG), _______, _______, _______, _______, KC_RCTL, KC_RALT, _______, _______
     ),
     [_MS] = LAYOUT(
                  _______, _______, _______, _______, _______, _______,                                     _______, _______, _______, _______, _______, _______,
@@ -155,61 +155,53 @@ bool oled_task_user(void) {
 }
 #endif
 
-// Determine the current tap dance state
 td_state_t cur_dance(tap_dance_state_t *state) {
     if (state->count == 1) {
         if (!state->pressed) return TD_SINGLE_TAP;
         else return TD_SINGLE_HOLD;
-    } else if (state->count == 2) return TD_DOUBLE_TAP;
+    } else if (state->count == 2) {
+        if (!state->pressed) return TD_DOUBLE_TAP;
+        else return TD_DOUBLE_HOLD;
+    }
     else return TD_UNKNOWN;
 }
 
-// Initialize tap structure associated with example tap dance key
 static td_tap_t ql_tap_state = {
-    .is_press_action = true,
+    .is_layer_active = false,
     .state = TD_NONE
 };
 
-// Functions that control what our tap dance key does
-void ql_finished(tap_dance_state_t *state, void *user_data) {
-    ql_tap_state.state = cur_dance(state);
-    switch (ql_tap_state.state) {
-        case TD_SINGLE_TAP:
-            tap_code(KC_RCTL);
-            break;
-        case TD_DOUBLE_TAP:
-            // Check to see if the layer is already set
-            if (layer_state_is(_MS)) {
-                // If already set, then switch it off
-                layer_off(_MS);
-            } else {
-                // If not already set, then switch the layer on
-                layer_on(_MS);
-            }
-            break;
-        default:
-            break;
+void on_each_tap_fn(tap_dance_state_t *state, void *user_data) {
+    // On first tap, activate _FN layer
+    if (state->count == 1) {
+        layer_on(_FN);
+        ql_tap_state.is_layer_active = true;
+    }
+    // On second tap, turn off _FN layer and activate _MS layer
+    else if (state->count == 2) {
+        layer_off(_FN);
+        layer_on(_MS);
+        ql_tap_state.is_layer_active = true;
     }
 }
 
+void ql_finished(tap_dance_state_t *state, void *user_data) {
+    ql_tap_state.state = cur_dance(state);
+}
+
 void ql_reset(tap_dance_state_t *state, void *user_data) {
-    // If the key was held down and now is released then switch off the layer
-    if (ql_tap_state.state == TD_SINGLE_HOLD || ql_tap_state.state == TD_DOUBLE_TAP) {
+    if (ql_tap_state.state == TD_SINGLE_TAP || ql_tap_state.state == TD_SINGLE_HOLD) {
+        // Turn off _FN layer if it was a single tap or hold
+        layer_off(_FN);
+    } else if (ql_tap_state.state == TD_DOUBLE_TAP || ql_tap_state.state == TD_DOUBLE_HOLD) {
+        // Turn off _MS layer if it was a double tap or hold
         layer_off(_MS);
     }
+
+    ql_tap_state.is_layer_active = false;
     ql_tap_state.state = TD_NONE;
 }
 
 tap_dance_action_t tap_dance_actions[] = {
-    [TD_MS_] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, ql_finished, ql_reset)
+    [TD_FN_] = ACTION_TAP_DANCE_FN_ADVANCED(on_each_tap_fn, ql_finished, ql_reset),
 };
-
-// // Set a long-ish tapping term for tap-dance keys
-// uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
-//     switch (keycode) {
-//         case QK_TAP_DANCE ... QK_TAP_DANCE_MAX:
-//             return 275;
-//         default:
-//             return TAPPING_TERM;
-//     }
-// }

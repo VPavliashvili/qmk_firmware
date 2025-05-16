@@ -1,6 +1,7 @@
 #include QMK_KEYBOARD_H
 
 #define LGUIALT TD(LGUIALT_)
+#define TD_FN TD(TD_FN_)
 
 enum layers {
     _MN, // main
@@ -9,9 +10,32 @@ enum layers {
     _MS, // mouse movements
 };
 
+typedef enum {
+    TD_NONE,
+    TD_UNKNOWN,
+    TD_SINGLE_TAP,
+    TD_SINGLE_HOLD,
+    TD_DOUBLE_TAP,
+    TD_DOUBLE_HOLD
+} td_state_t;
+
+typedef struct {
+    bool is_layer_active;
+    td_state_t state;
+} td_tap_t;
+
 enum tap_dance_aliases {
     LGUIALT_,
+    TD_FN_,
 };
+
+// Function associated with all tap dances
+td_state_t cur_dance(tap_dance_state_t *state);
+
+// Functions associated with individual tap dances
+void on_each_tap_td_fn(tap_dance_state_t *state, void *user_data);
+void td_fn_finished(tap_dance_state_t *state, void *user_data);
+void td_fn_reset(tap_dance_state_t *state, void *user_data);
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [_MN] = LAYOUT_5x6(
@@ -21,7 +45,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LSFT, KC_Z   , KC_X   , KC_C   , KC_V   , KC_B   ,                         KC_N   , KC_M   , KC_COMM, KC_DOT , KC_SLSH, KC_RSFT,
                           KC_LBRC, KC_LCBR,                                                             KC_RCBR, KC_RBRC,
                                                       LGUIALT, KC_SPC ,     KC_BSPC, MO(_SM),
-                                                      XXXXXXX, KC_LCTL,     MO(_FN), XXXXXXX,
+                                                      XXXXXXX, KC_LCTL,     TD_FN  , XXXXXXX,
                                                       XXXXXXX, XXXXXXX,     XXXXXXX, XXXXXXX
     ),
     [_SM] = LAYOUT_5x6(
@@ -44,8 +68,66 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                                                       XXXXXXX, _______,     _______, XXXXXXX,
                                                       XXXXXXX, XXXXXXX,     XXXXXXX, XXXXXXX
     ),
+    [_MS] = LAYOUT_5x6(
+        _______, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
+        _______, _______, MS_WHLU, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
+        _______, _______, MS_WHLD, _______, MS_BTN1, MS_BTN1,                         MS_LEFT, MS_DOWN, MS_UP  , MS_RGHT, _______, _______,
+        _______, _______, _______, _______, _______, _______,                         _______, _______, _______, _______, _______, _______,
+                          _______, _______,                                                             _______, _______,
+                                                      _______, MS_BTN3,     _______, _______,
+                                                      _______, _______,     _______, _______,
+                                                      _______, _______,     _______, _______
+    ),
 };
+
+td_state_t cur_dance(tap_dance_state_t *state) {
+    if (state->count == 1) {
+        if (!state->pressed) return TD_SINGLE_TAP;
+        else return TD_SINGLE_HOLD;
+    } else if (state->count == 2) {
+        if (!state->pressed) return TD_DOUBLE_TAP;
+        else return TD_DOUBLE_HOLD;
+    }
+    else return TD_UNKNOWN;
+}
+
+static td_tap_t td_fn_tap_state = {
+    .is_layer_active = false,
+    .state = TD_NONE
+};
+
+void on_each_tap_td_fn(tap_dance_state_t *state, void *user_data) {
+    // On first tap, activate _FN layer
+    if (state->count == 1) {
+        layer_on(_FN);
+        td_fn_tap_state.is_layer_active = true;
+    }
+    // On second tap, turn off _FN layer and activate _MS layer
+    else if (state->count == 2) {
+        layer_off(_FN);
+        layer_on(_MS);
+        td_fn_tap_state.is_layer_active = true;
+    }
+}
+
+void td_fn_finished(tap_dance_state_t *state, void *user_data) {
+    td_fn_tap_state.state = cur_dance(state);
+}
+
+void td_fn_reset(tap_dance_state_t *state, void *user_data) {
+    if (td_fn_tap_state.state == TD_SINGLE_TAP || td_fn_tap_state.state == TD_SINGLE_HOLD) {
+        // Turn off _FN layer if it was a single tap or hold
+        layer_off(_FN);
+    } else if (td_fn_tap_state.state == TD_DOUBLE_TAP || td_fn_tap_state.state == TD_DOUBLE_HOLD) {
+        // Turn off _MS layer if it was a double tap or hold
+        layer_off(_MS);
+    }
+
+    td_fn_tap_state.is_layer_active = false;
+    td_fn_tap_state.state = TD_NONE;
+}
 
 tap_dance_action_t tap_dance_actions[] = {
     [LGUIALT_] = ACTION_TAP_DANCE_DOUBLE(KC_LALT, KC_LGUI),
+    [TD_FN_] = ACTION_TAP_DANCE_FN_ADVANCED(on_each_tap_td_fn, td_fn_finished, td_fn_reset),
 };

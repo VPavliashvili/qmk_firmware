@@ -1,7 +1,9 @@
 #include QMK_KEYBOARD_H
 
 #define LGUIALT TD(LGUIALT_)
+#define KC_G_B TD(KCGB_)
 #define TD_FN TD(TD_FN_)
+#define TD_SM TD(TD_SM_RGUI_)
 
 enum layers {
     _MN, // main
@@ -27,7 +29,9 @@ typedef struct {
 
 enum tap_dance_aliases {
     LGUIALT_,
+    KCGB_,
     TD_FN_,
+    TD_SM_RGUI_,
 };
 
 // Function associated with all tap dances
@@ -38,14 +42,17 @@ void on_each_tap_td_fn(tap_dance_state_t *state, void *user_data);
 void td_fn_finished(tap_dance_state_t *state, void *user_data);
 void td_fn_reset(tap_dance_state_t *state, void *user_data);
 
+void sm_rgui_finished(tap_dance_state_t *state, void *user_data);
+void sm_rgui_reset(tap_dance_state_t *state, void *user_data);
+
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     [_MN] = LAYOUT_5x6(
-        TO(_GG), XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                         XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_LSCR,
+        TO(_GG), XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,                         XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, KC_SCRL,
         KC_TAB , KC_Q   , KC_W   , KC_E   , KC_R   , KC_T   ,                         KC_Y   , KC_U   , KC_I   , KC_O   , KC_P   , KC_BSLS,
         KC_ESC , KC_A   , KC_S   , KC_D   , KC_F   , KC_G   ,                         KC_H   , KC_J   , KC_K   , KC_L   , KC_SCLN, KC_ENT ,
         KC_LSFT, KC_Z   , KC_X   , KC_C   , KC_V   , KC_B   ,                         KC_N   , KC_M   , KC_COMM, KC_DOT , KC_SLSH, KC_RSFT,
                           XXXXXXX, XXXXXXX,                                                             XXXXXXX, XXXXXXX,
-                                                      LGUIALT, KC_SPC ,     KC_BSPC, MO(_SM),
+                                                      LGUIALT, KC_SPC ,     KC_BSPC, TD_SM  ,
                                                       XXXXXXX, KC_LCTL,     TD_FN  , XXXXXXX,
                                                       XXXXXXX, XXXXXXX,     XXXXXXX, XXXXXXX
     ),
@@ -80,14 +87,14 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                                                       _______, _______,     _______, _______
     ),
     [_GG] = LAYOUT_5x6(
-        TO(_MN), KC_1   , KC_2   , KC_3   , KC_4   , KC_5   ,                         KC_6   , KC_7   , KC_8   , KC_9   , KC_0   , XXXXXXX,
+        TO(_MN), XXXXXXX, KC_1   , KC_2   , KC_3   , KC_4   ,                         KC_6   , KC_7   , KC_8   , KC_9   , KC_0   , XXXXXXX,
         KC_TAB , KC_GRV , KC_Q   , KC_W   , KC_E   , KC_R   ,                         KC_Y   , KC_U   , KC_I   , KC_O   , KC_P   , KC_BSLS,
         KC_ESC , XXXXXXX, KC_A   , KC_S   , KC_D   , KC_F   ,                         KC_H   , KC_J   , KC_K   , KC_L   , KC_SCLN, KC_ENT ,
         KC_LSFT, KC_LCTL, KC_Z   , KC_X   , KC_C   , KC_V   ,                         KC_N   , KC_M   , KC_COMM, KC_DOT , KC_SLSH, KC_RSFT,
                           KC_LBRC, KC_LCBR,                                                             KC_RCBR, KC_RBRC,
                                                       KC_LALT, KC_SPC ,     KC_BSPC, MO(_SM),
-                                                      XXXXXXX, XXXXXXX,     TD_FN  , XXXXXXX,
-                                                      XXXXXXX, XXXXXXX,     XXXXXXX, KC_LSCR
+                                                      XXXXXXX, KC_G_B ,     TD_FN  , XXXXXXX,
+                                                      XXXXXXX, XXXXXXX,     XXXXXXX, XXXXXXX
     ),
 };
 
@@ -104,6 +111,11 @@ td_state_t cur_dance(tap_dance_state_t *state) {
 
 static td_tap_t td_fn_tap_state = {
     .is_layer_active = false,
+    .state = TD_NONE
+};
+
+static td_tap_t sm_rgui_tap_state = {
+    .is_layer_active = true,
     .state = TD_NONE
 };
 
@@ -138,7 +150,34 @@ void td_fn_reset(tap_dance_state_t *state, void *user_data) {
     td_fn_tap_state.state = TD_NONE;
 }
 
+void sm_rgui_finished(tap_dance_state_t *state, void *user_data) {
+    sm_rgui_tap_state.state = cur_dance(state);
+    switch (sm_rgui_tap_state.state) {
+        case TD_SINGLE_TAP:
+            layer_on(_SM);
+            sm_rgui_tap_state.is_layer_active = true;
+            break;
+        case TD_SINGLE_HOLD:
+            layer_on(_SM);
+            sm_rgui_tap_state.is_layer_active = true;
+            break;
+        case TD_DOUBLE_TAP:
+            tap_code(KC_RGUI);
+            break;
+        default:
+            break;
+    }
+}
+
+void sm_rgui_reset(tap_dance_state_t *state, void *user_data) {
+    sm_rgui_tap_state.is_layer_active = false;
+    sm_rgui_tap_state.state = TD_NONE;
+    layer_off(_SM);
+}
+
 tap_dance_action_t tap_dance_actions[] = {
     [LGUIALT_] = ACTION_TAP_DANCE_DOUBLE(KC_LALT, KC_LGUI),
+    [KCGB_] = ACTION_TAP_DANCE_DOUBLE(KC_G, KC_B),
     [TD_FN_] = ACTION_TAP_DANCE_FN_ADVANCED(on_each_tap_td_fn, td_fn_finished, td_fn_reset),
+    [TD_SM_RGUI_] = ACTION_TAP_DANCE_FN_ADVANCED(NULL, sm_rgui_finished, sm_rgui_reset),
 };
